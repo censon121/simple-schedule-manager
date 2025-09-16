@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简单日程管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .add-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .add-form input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .add-form button {
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .add-form button:hover {
+            background: #0056b3;
+        }
+        .schedule-list {
+            list-style: none;
+            padding: 0;
+        }
+        .schedule-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .schedule-item.completed {
+            opacity: 0.6;
+            text-decoration: line-through;
+        }
+        .schedule-content {
+            flex: 1;
+        }
+        .schedule-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
+        .complete-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .complete-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📅 简单日程管理系统</h1>
+
+        <div class="add-form">
+            <input type="date" id="dateInput" placeholder="日期">
+            <input type="time" id="timeInput" placeholder="时间">
+            <input type="text" id="textInput" placeholder="日程内容">
+            <button onclick="addSchedule()">添加</button>
+        </div>
+
+        <ul class="schedule-list" id="scheduleList">
+            <!-- 日程项目将在这里显示 -->
+        </ul>
+    </div>
+
+    <script>
+        let schedules = JSON.parse(localStorage.getItem('schedules')) || [];
+
+        function addSchedule() {
+            const date = document.getElementById('dateInput').value;
+            const time = document.getElementById('timeInput').value;
+            const text = document.getElementById('textInput').value;
+
+            if (!date || !time || !text) {
+                alert('请填写完整信息！');
+                return;
+            }
+
+            const schedule = {
+                id: Date.now(),
+                date: date,
+                time: time,
+                text: text,
+                completed: false
+            };
+
+            schedules.push(schedule);
+            saveSchedules();
+            renderSchedules();
+
+            // 清空输入框
+            document.getElementById('dateInput').value = '';
+            document.getElementById('timeInput').value = '';
+            document.getElementById('textInput').value = '';
+        }
+
+        function deleteSchedule(id) {
+            if (confirm('确定要删除这个日程吗？')) {
+                schedules = schedules.filter(schedule => schedule.id !== id);
+                saveSchedules();
+                renderSchedules();
+            }
+        }
+
+        function toggleComplete(id) {
+            const schedule = schedules.find(s => s.id === id);
+            if (schedule) {
+                schedule.completed = !schedule.completed;
+                saveSchedules();
+                renderSchedules();
+            }
+        }
+
+        function saveSchedules() {
+            localStorage.setItem('schedules', JSON.stringify(schedules));
+        }
+
+        function renderSchedules() {
+            const scheduleList = document.getElementById('scheduleList');
+            scheduleList.innerHTML = '';
+
+            // 按日期和时间排序
+            const sortedSchedules = schedules.sort((a, b) => {
+                const dateA = new Date(a.date + ' ' + a.time);
+                const dateB = new Date(b.date + ' ' + b.time);
+                return dateA - dateB;
+            });
+
+            sortedSchedules.forEach(schedule => {
+                const li = document.createElement('li');
+                li.className = `schedule-item ${schedule.completed ? 'completed' : ''}`;
+
+                li.innerHTML = `
+                    <div class="schedule-content">
+                        <div>${schedule.text}</div>
+                        <div class="schedule-time">📅 ${schedule.date} ⏰ ${schedule.time}</div>
+                    </div>
+                    <div>
+                        <button class="complete-btn" onclick="toggleComplete(${schedule.id})">
+                            ${schedule.completed ? '取消完成' : '完成'}
+                        </button>
+                        <button class="delete-btn" onclick="deleteSchedule(${schedule.id})">删除</button>
+                    </div>
+                `;
+
+                scheduleList.appendChild(li);
+            });
+        }
+
+        // 页面加载时渲染日程
+        document.addEventListener('DOMContentLoaded', renderSchedules);
+
+        // 添加回车键支持
+        document.getElementById('textInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addSchedule();
+            }
+        });
+    </script>
+</body>
+</html>

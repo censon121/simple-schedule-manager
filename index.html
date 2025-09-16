@@ -135,6 +135,95 @@
             font-size: 18px;
             margin-left: 10px;
         }
+        .edit-btn {
+            background: #ffc107;
+            color: #212529;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .edit-btn:hover {
+            background: #e0a800;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            color: #333;
+        }
+        .close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .close:hover {
+            color: #000;
+        }
+        .modal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .modal-form input, .modal-form select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .modal-buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .save-btn {
+            background: #007bff;
+            color: white;
+        }
+        .save-btn:hover {
+            background: #0056b3;
+        }
+        .cancel-btn {
+            background: #6c757d;
+            color: white;
+        }
+        .cancel-btn:hover {
+            background: #545b62;
+        }
     </style>
 </head>
 <body>
@@ -159,6 +248,33 @@
         <ul class="schedule-list" id="scheduleList">
             <!-- 日程项目将在这里显示 -->
         </ul>
+    </div>
+
+    <!-- 编辑日程模态框 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>编辑日程</h2>
+                <button class="close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div class="modal-form">
+                <input type="date" id="editDateInput" placeholder="日期">
+                <input type="time" id="editTimeInput" placeholder="时间">
+                <input type="text" id="editTextInput" placeholder="日程内容">
+                <select id="editReminderSelect">
+                    <option value="none">无提醒</option>
+                    <option value="5">提前5分钟</option>
+                    <option value="10">提前10分钟</option>
+                    <option value="15">提前15分钟</option>
+                    <option value="30">提前30分钟</option>
+                    <option value="60">提前1小时</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeEditModal()">取消</button>
+                <button class="save-btn" onclick="saveEditSchedule()">保存</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -222,6 +338,60 @@
                 }
                 saveSchedules();
                 renderSchedules();
+            }
+        }
+
+        let editingScheduleId = null;
+
+        function editSchedule(id) {
+            const schedule = schedules.find(s => s.id === id);
+            if (schedule) {
+                editingScheduleId = id;
+                document.getElementById('editDateInput').value = schedule.date;
+                document.getElementById('editTimeInput').value = schedule.time;
+                document.getElementById('editTextInput').value = schedule.text;
+                document.getElementById('editReminderSelect').value = schedule.reminder || 'none';
+                document.getElementById('editModal').style.display = 'block';
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            editingScheduleId = null;
+        }
+
+        function saveEditSchedule() {
+            if (!editingScheduleId) return;
+
+            const date = document.getElementById('editDateInput').value;
+            const time = document.getElementById('editTimeInput').value;
+            const text = document.getElementById('editTextInput').value;
+            const reminder = document.getElementById('editReminderSelect').value;
+
+            if (!date || !time || !text) {
+                alert('请填写完整信息！');
+                return;
+            }
+
+            const schedule = schedules.find(s => s.id === editingScheduleId);
+            if (schedule) {
+                // 清除旧的提醒
+                if (reminderIntervals[editingScheduleId]) {
+                    clearInterval(reminderIntervals[editingScheduleId]);
+                    delete reminderIntervals[editingScheduleId];
+                }
+
+                // 更新日程信息
+                schedule.date = date;
+                schedule.time = time;
+                schedule.text = text;
+                schedule.reminder = reminder;
+                schedule.reminderTriggered = false; // 重置提醒状态
+
+                saveSchedules();
+                renderSchedules();
+                setupReminder(schedule);
+                closeEditModal();
             }
         }
 
@@ -338,6 +508,7 @@
                         ${reminderText ? `<div class="reminder-status ${schedule.reminder && !schedule.reminderTriggered ? 'reminder-active' : ''}">🔔 ${reminderText}</div>` : ''}
                     </div>
                     <div>
+                        <button class="edit-btn" onclick="editSchedule(${schedule.id})">编辑</button>
                         <button class="complete-btn" onclick="toggleComplete(${schedule.id})">
                             ${schedule.completed ? '取消完成' : '完成'}
                         </button>
@@ -367,6 +538,21 @@
 
         // 页面获得焦点时重新初始化提醒
         window.addEventListener('focus', initReminders);
+
+        // 点击模态框外部关闭
+        window.addEventListener('click', function(e) {
+            const modal = document.getElementById('editModal');
+            if (e.target === modal) {
+                closeEditModal();
+            }
+        });
+
+        // 按ESC键关闭模态框
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeEditModal();
+            }
+        });
     </script>
 </body>
 </html>

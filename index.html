@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>简单日程管理系统</title>
+    <title>智能日程管理系统 - 带提醒功能</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -24,11 +24,13 @@
         }
         .add-form {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 20px;
         }
-        .add-form input {
+        .add-form input, .add-form select {
             flex: 1;
+            min-width: 120px;
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -91,16 +93,66 @@
         .complete-btn:hover {
             background: #218838;
         }
+        .reminder-status {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .reminder-active {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 300px;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .notification.dismiss {
+            animation: slideOut 0.3s ease-in;
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        .notification-close {
+            background: none;
+            border: none;
+            color: white;
+            float: right;
+            cursor: pointer;
+            font-size: 18px;
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📅 简单日程管理系统</h1>
+        <h1>📅 智能日程管理系统</h1>
 
         <div class="add-form">
             <input type="date" id="dateInput" placeholder="日期">
             <input type="time" id="timeInput" placeholder="时间">
             <input type="text" id="textInput" placeholder="日程内容">
+            <select id="reminderSelect">
+                <option value="none">无提醒</option>
+                <option value="5">提前5分钟</option>
+                <option value="10">提前10分钟</option>
+                <option value="15">提前15分钟</option>
+                <option value="30">提前30分钟</option>
+                <option value="60">提前1小时</option>
+            </select>
             <button onclick="addSchedule()">添加</button>
         </div>
 
@@ -111,11 +163,13 @@
 
     <script>
         let schedules = JSON.parse(localStorage.getItem('schedules')) || [];
+        let reminderIntervals = {};
 
         function addSchedule() {
             const date = document.getElementById('dateInput').value;
             const time = document.getElementById('timeInput').value;
             const text = document.getElementById('textInput').value;
+            const reminder = document.getElementById('reminderSelect').value;
 
             if (!date || !time || !text) {
                 alert('请填写完整信息！');
@@ -127,21 +181,30 @@
                 date: date,
                 time: time,
                 text: text,
-                completed: false
+                reminder: reminder,
+                completed: false,
+                reminderTriggered: false
             };
 
             schedules.push(schedule);
             saveSchedules();
             renderSchedules();
+            setupReminder(schedule);
 
             // 清空输入框
             document.getElementById('dateInput').value = '';
             document.getElementById('timeInput').value = '';
             document.getElementById('textInput').value = '';
+            document.getElementById('reminderSelect').value = 'none';
         }
 
         function deleteSchedule(id) {
             if (confirm('确定要删除这个日程吗？')) {
+                // 清除提醒定时器
+                if (reminderIntervals[id]) {
+                    clearInterval(reminderIntervals[id]);
+                    delete reminderIntervals[id];
+                }
                 schedules = schedules.filter(schedule => schedule.id !== id);
                 saveSchedules();
                 renderSchedules();
@@ -152,9 +215,87 @@
             const schedule = schedules.find(s => s.id === id);
             if (schedule) {
                 schedule.completed = !schedule.completed;
+                // 如果标记为完成，清除提醒
+                if (schedule.completed && reminderIntervals[id]) {
+                    clearInterval(reminderIntervals[id]);
+                    delete reminderIntervals[id];
+                }
                 saveSchedules();
                 renderSchedules();
             }
+        }
+
+        function setupReminder(schedule) {
+            if (schedule.reminder === 'none' || schedule.completed) return;
+
+            const scheduleDateTime = new Date(schedule.date + ' ' + schedule.time);
+            const reminderMinutes = parseInt(schedule.reminder);
+            const reminderTime = new Date(scheduleDateTime.getTime() - (reminderMinutes * 60 * 1000));
+            const now = new Date();
+
+            // 如果提醒时间已过，不设置提醒
+            if (reminderTime <= now) return;
+
+            const timeUntilReminder = reminderTime - now;
+
+            // 设置提醒定时器
+            reminderIntervals[schedule.id] = setTimeout(() => {
+                if (!schedule.completed && !schedule.reminderTriggered) {
+                    showNotification(schedule);
+                    schedule.reminderTriggered = true;
+                    saveSchedules();
+                }
+            }, timeUntilReminder);
+        }
+
+        function showNotification(schedule) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                <button class="notification-close" onclick="dismissNotification(this)">×</button>
+                <div><strong>⏰ 日程提醒</strong></div>
+                <div>${schedule.text}</div>
+                <div>📅 ${schedule.date} ⏰ ${schedule.time}</div>
+            `;
+
+            document.body.appendChild(notification);
+
+            // 5秒后自动消失
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.classList.add('dismiss');
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.remove();
+                        }
+                    }, 300);
+                }
+            }, 5000);
+        }
+
+        function dismissNotification(button) {
+            const notification = button.parentNode;
+            notification.classList.add('dismiss');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+
+        function initReminders() {
+            // 清除所有现有提醒
+            Object.values(reminderIntervals).forEach(interval => {
+                clearInterval(interval);
+            });
+            reminderIntervals = {};
+
+            // 为所有未完成的日程重新设置提醒
+            schedules.forEach(schedule => {
+                if (!schedule.completed && schedule.reminder !== 'none') {
+                    setupReminder(schedule);
+                }
+            });
         }
 
         function saveSchedules() {
@@ -176,10 +317,25 @@
                 const li = document.createElement('li');
                 li.className = `schedule-item ${schedule.completed ? 'completed' : ''}`;
 
+                let reminderText = '';
+                if (schedule.reminder !== 'none') {
+                    const reminderMinutes = parseInt(schedule.reminder);
+                    if (reminderMinutes >= 60) {
+                        reminderText = `提前${reminderMinutes / 60}小时提醒`;
+                    } else {
+                        reminderText = `提前${reminderMinutes}分钟提醒`;
+                    }
+
+                    if (schedule.reminderTriggered) {
+                        reminderText += ' ✅';
+                    }
+                }
+
                 li.innerHTML = `
                     <div class="schedule-content">
                         <div>${schedule.text}</div>
                         <div class="schedule-time">📅 ${schedule.date} ⏰ ${schedule.time}</div>
+                        ${reminderText ? `<div class="reminder-status ${schedule.reminder && !schedule.reminderTriggered ? 'reminder-active' : ''}">🔔 ${reminderText}</div>` : ''}
                     </div>
                     <div>
                         <button class="complete-btn" onclick="toggleComplete(${schedule.id})">
@@ -194,7 +350,13 @@
         }
 
         // 页面加载时渲染日程
-        document.addEventListener('DOMContentLoaded', renderSchedules);
+        document.addEventListener('DOMContentLoaded', function() {
+            renderSchedules();
+            initReminders();
+
+            // 定期检查提醒（每分钟）
+            setInterval(initReminders, 60000);
+        });
 
         // 添加回车键支持
         document.getElementById('textInput').addEventListener('keypress', function(e) {
@@ -202,6 +364,9 @@
                 addSchedule();
             }
         });
+
+        // 页面获得焦点时重新初始化提醒
+        window.addEventListener('focus', initReminders);
     </script>
 </body>
 </html>
